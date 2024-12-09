@@ -18,6 +18,15 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+
+
+Route::prefix('admin')->middleware(['auth'])->group(function () {
+    Route::get('dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
+    Route::get('users', [AdminController::class, 'users'])->name('admin.users');
+});
+
+
+
 // Route::middleware('auth:admin')->group(function() {
 //     // Semua rute admin di sini
 //     Route::get('/admin', [AdminController::class, 'index'])->name('admin.dashboard');
@@ -48,7 +57,11 @@ Route::get('/', function () {
 // });
 
 // routes/web.php (Laravel)
-Route::get('/api/admin/requests', [AdminController::class, 'index']);
-Route::post('/api/admin/accept/{id}', [AdminController::class, 'acceptRequest']);
-Route::post('/api/admin/reject/{id}', [AdminController::class, 'rejectRequest']);
-Route::delete('/api/admin/delete/{id}', [AdminController::class, 'deleteRequest']);
+// Route::get('/api/admin/requests', [AdminController::class, 'index']);
+// Route::post('/api/admin/accept/{id}', [AdminController::class, 'acceptRequest']);
+// Route::post('/api/admin/reject/{id}', [AdminController::class, 'rejectRequest']);
+// Route::delete('/api/admin/delete/{id}', [AdminController::class, 'deleteRequest']);
+
+
+
+Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');

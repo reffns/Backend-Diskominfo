@@ -4,29 +4,16 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\FormHosting;
 use App\Models\Request as UserRequest;
 use App\Models\RequestForm;
 
-class RequestController extends Controller
+class FormHostingController extends Controller
 {
     public function index()
     {
-        $forms = RequestForm::all(); // Mengambil semua data dari tabel 'requests'
+        $forms = FormHosting::all(); // Mengambil semua data dari tabel 'formhosting'
         return response()->json($forms);
-    }
-
-    public function updateStatus(Request $request, $id)
-    {
-        // Cari permohonan berdasarkan ID
-        $requests = RequestForm::find($id);
-        if (!$requests) {
-            return response()->json(['message' => 'Permohonan tidak ditemukan'], 404);
-        }
-    
-        $requests->status = $request->status;
-        $requests->save();
-    
-        return response()->json(['message' => 'Status diperbarui'], 200);
     }
 
     public function submitRequest(Request $request)
@@ -36,9 +23,9 @@ class RequestController extends Controller
             'name' => 'required|string|max:255',
             'date' => 'required|date',
             'category' => 'required|string',
-            'codeOffice' => 'required|string',
-            'description' => 'nullable|string', // Mengubah menjadi opsional
-            'file' => 'nullable|mimes:pdf,doc,docx|max:2048', // Mengubah menjadi opsional
+            'codeOffice' => 'required|string|max:100',
+            'description' => 'nullable|string', // Opsional
+            'proof' => 'nullable|file|mimes:jpg,png,pdf|max:2048', // Opsional
         ]);
     
         if ($validator->fails()) {
@@ -48,41 +35,50 @@ class RequestController extends Controller
             ], 422);
         }
     
-        // Simpan data permohonan
-        $userRequest = new UserRequest($request->all());
-    
-        // Generate kode unik
-        $latestRequest = UserRequest::latest('id')->first();
-        $nextNumber = $latestRequest ? ((int)substr($latestRequest->unique_code, -5)) + 1 : 1;
-        $uniqueCode = 'PM-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
-        $userRequest->unique_code = $uniqueCode;
+        // Simpan data permohonan ke dalam tabel form_hosting
+        $formHosting = new FormHosting();
+        $formHosting->name = $request->name;
+        $formHosting->date = $request->date;
+        $formHosting->category = $request->category;
+        $formHosting->code_office = $request->codeOffice; // Sesuaikan dengan nama kolom di database
+        $formHosting->description = $request->description;
     
         // Cek jika ada file yang di-upload
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $filePath = $file->store('public/uploads'); // Simpan di folder `public/uploads`
-            $userRequest->file_path = $filePath; // Simpan path file ke dalam database
+        if ($request->hasFile('proof')) {
+            $file = $request->file('proof');
+            $filePath = $file->store('public/proofs'); // Simpan di folder `public/proofs`
+            $formHosting->proof = $filePath; // Simpan path file ke dalam database
         }
     
-        $userRequest->save();
+        // Generate kode unik
+        $latestRequest = FormHosting::latest('id')->first();
+        $nextNumber = $latestRequest ? ((int)substr($latestRequest->unique_code, -5)) + 1 : 1;
+        $uniqueCode = 'HS-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+        $formHosting->unique_code = $uniqueCode;
+    
+        // Set status default menjadi "Terkirim"
+        $formHosting->status = 'Terkirim';
+    
+        // Simpan data ke dalam database
+        $formHosting->save();
     
         // Return success response
         return response()->json([
             'status' => 'success',
             'message' => 'Permohonan berhasil diterima',
             'unique_code' => $uniqueCode,
-        ], 200);
+        ], 201);
     }
     
     
-
+    
     public function checkStatus(Request $request)
     {
         // Ambil kode unik dari query parameter
         $uniqueCode = $request->query('uniqueCode');
 
         // Cari permohonan berdasarkan kode unik
-        $form = RequestForm::where('unique_code', $uniqueCode)->first();
+        $form = FormHosting::where('unique_code', $uniqueCode)->first();
 
         if (!$form) {
             return response()->json(['status' => 'error', 'message' => 'Kode unik tidak ditemukan'], 404);
@@ -100,15 +96,15 @@ class RequestController extends Controller
 
     public function getAllRequests()
     {
-        $requests = RequestForm::all(); // Mengambil semua data permohonan
+        $requests = FormHosting::all(); // Mengambil semua data permohonan
         return response()->json($requests);
     }
 
     public function getStatistics()
     {
-        $totalRequests = RequestForm::count();
-        $completedRequests = RequestForm::where('status', 'Selesai')->count();
-        $pendingRequests = RequestForm::where('status', '!=', 'Selesai')->count();
+        $totalRequests = FormHosting::count();
+        $completedRequests = FormHosting::where('status', 'Selesai')->count();
+        $pendingRequests = FormHosting::where('status', '!=', 'Selesai')->count();
     
         return response()->json([
             'totalRequests' => $totalRequests,
@@ -116,6 +112,4 @@ class RequestController extends Controller
             'pendingRequests' => $pendingRequests,
         ]);
     }
-    
-    
 }

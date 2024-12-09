@@ -2,65 +2,108 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\RequestForm;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use App\Models\FormHosting;
+use App\Models\FormZoom;
+use App\Models\Form;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
-    // Method untuk menampilkan semua permohonan
-    public function index()
+    // Mendapatkan semua permohonan
+    public function getAllRequests()
     {
-        $requests = RequestForm::all();
-        return response()->json($requests);
-    }
+        $hostingForms = FormHosting::all();
+        $zoomForms = FormZoom::all();
+        $troubleshootForms = Form::all();
     
-    public function acceptRequest($id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $requestForm->status = 'Diterima';
-        $requestForm->save();
+        // Gabungkan semua data dalam satu array
+        $allForms = $hostingForms
+        ->map(function ($form) {
+            return [
+                'id' => $form->id,
+                'name' => $form->name,
+                'date' => $form->date,
+                'category' => 'Hosting',
+                'description' => $form->description,
+                'proof' => $form->proof ?? null,
+                'unique_code' => $form->unique_code,
+                'status' => $form->status,
+                'reply_file_url' => $form->reply_file_url ?? null, // Tambahkan ini
+            ];
+        })
+        ->merge($zoomForms->map(function ($form) {
+            return [
+                'id' => $form->id,
+                'name' => $form->name,
+                'date' => $form->date,
+                'category' => 'Zoom',
+                'description' => $form->description,
+                'proof' => $form->proof ?? null,
+                'unique_code' => $form->unique_code,
+                'status' => $form->status,
+                'reply_file_url' => $form->reply_file_url ?? null, // Tambahkan ini
+            ];
+        }))
+        ->merge($troubleshootForms->map(function ($form) {
+            return [
+                'id' => $form->id,
+                'name' => $form->name,
+                'date' => $form->date,
+                'category' => 'Troubleshoot',
+                'description' => $form->description,
+                'proof' => $form->upload_file_path ?? null,
+                'unique_code' => $form->unique_code,
+                'status' => $form->status,
+                'reply_file_url' => $form->reply_file_url ?? null, // Tambahkan ini
+            ];
+        }));
     
-        return response()->json(['message' => 'Permohonan diterima.']);
-    }
     
-    public function rejectRequest($id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $requestForm->status = 'Ditolak';
-        $requestForm->save();
-    
-        return response()->json(['message' => 'Permohonan ditolak.']);
-    }
-    
-    public function deleteRequest($id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $requestForm->delete();
-    
-        return response()->json(['message' => 'Permohonan dihapus.']);
-    }
-    public function showLoginForm()
-    {
-        return view('admin.login'); // Pastikan Anda memiliki view ini
-    }
-    
-    // Proses login admin
-    public function login(Request $request)
-    {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
-    
-        if (Auth::guard('admin')->attempt($credentials)) {
-            $request->session()->regenerate();
-            return redirect()->intended('admin/dashboard'); // Arahkan ke halaman dashboard admin
-        }
-    
-        return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
-        ]);
+        return response()->json($allForms);
     }
 
+    // Mengirim balasan dengan file
+    public function sendReply(Request $request, $id)
+    {
+        // Validasi hanya untuk file
+        $request->validate([
+            'file' => 'required|mimes:pdf,docx,doc|max:2048',
+        ]);
+    
+        // Simpan file ke storage
+        $filePath = $request->file('file')->store('replies');
+        $fileUrl = Storage::url($filePath);
+    
+        // Cari form di salah satu tabel
+        $form = FormHosting::find($id) 
+            ?? FormZoom::find($id) 
+            ?? Form::find($id);
+    
+        if ($form) {
+            $form->reply_file_url = $fileUrl; // Simpan URL file ke kolom reply_file_url
+            $form->status = 'Selesai'; // Ubah status menjadi "Selesai"
+            $form->save();
+    
+            // Logging untuk debugging
+            Log::info("Reply sent for ID: $id", [
+                'status' => $form->status,
+                'reply_file_url' => $fileUrl,
+            ]);
+    
+            return response()->json([
+                'message' => 'Balasan berhasil dikirim',
+                'file_url' => $fileUrl,
+            ]);
+        } else {
+            Log::error("Form with ID $id not found");
+    
+            return response()->json([
+                'message' => 'Form tidak ditemukan',
+            ], 404);
+        }
+    }
+    
+    
 }
